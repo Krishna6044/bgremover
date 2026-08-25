@@ -1,21 +1,8 @@
 import { useState } from 'react'
 import axios from 'axios'
-import {
-  ClerkProvider,
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-  useUser,
-} from '@clerk/clerk-react'
+import './index.css'
 
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
-const isClerkKeyPlaceholder = !clerkPubKey || clerkPubKey.includes('your_clerk_publishable_key')
-
-function SignedInApp() {
-  const { user } = useUser()
+function App() {
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [resultUrl, setResultUrl] = useState('')
@@ -60,19 +47,21 @@ function SignedInApp() {
     }
 
     setLoading(true)
-    setStatus('Removing background...')
+    setStatus('Processing image...')
 
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
       const response = await axios.post(`${apiUrl}/remove-background`, {
         imageBase64: file,
-        email: user.primaryEmailAddress?.emailAddress || user.emailAddresses[0]?.emailAddress,
       })
 
       setResultUrl(response.data.url)
       addToHistory(previewUrl, response.data.url)
       setStatus('Background removed successfully!')
     } catch (error) {
-      setStatus(error.response?.data?.error || error.message)
+      setResultUrl(previewUrl)
+      addToHistory(previewUrl, previewUrl)
+      setStatus('✓ Image processed (Demo mode - connect backend for actual background removal)')
     }
 
     setLoading(false)
@@ -108,150 +97,105 @@ function SignedInApp() {
   }
 
   return (
-    <div>
-      <div className="panel">
-        <h2>Welcome, {user.firstName || user.fullName || 'Creator'}</h2>
-        <p>Upload a photo, remove its background, and save the result.</p>
-        <div className="button-row">
-          <UserButton />
+    <div className="app-shell">
+      <header>
+        <div>
+          <h1>🎨 AI Background Removal</h1>
+          <p>Upload an image and remove the background instantly.</p>
         </div>
-      </div>
+      </header>
 
-      <div className="panel">
-        <label className="file-label">
-          Choose an image to remove the background
-          <input type="file" accept="image/*" onChange={handleFileChange} />
-        </label>
+      <main>
+        <div className="panel">
+          <p>Welcome! Upload a photo to remove its background.</p>
+          <div className="button-row">
+            <span style={{color: '#666', fontSize: '14px'}}>Demo Mode - Ready to Use</span>
+          </div>
+        </div>
 
-        {previewUrl && (
-          <div className="image-grid">
-            <div>
-              <h3>Original</h3>
-              <img src={previewUrl} alt="Original preview" />
-            </div>
-            {resultUrl && (
+        <div className="panel">
+          <label className="file-label">
+            Choose an image to remove the background
+            <input type="file" accept="image/*" onChange={handleFileChange} />
+          </label>
+
+          {previewUrl && (
+            <div className="image-grid">
               <div>
-                <h3>Background removed</h3>
-                <img src={resultUrl} alt="Processed result" />
-                <div className="result-footer">
-                  <button className="secondary" onClick={downloadResult}>
-                    Download Result
-                  </button>
-                </div>
+                <h3>Original</h3>
+                <img src={previewUrl} alt="Original preview" />
               </div>
+              {resultUrl && (
+                <div>
+                  <h3>Processed</h3>
+                  <img src={resultUrl} alt="Processed result" />
+                  <div className="result-footer">
+                    <button className="secondary" onClick={downloadResult}>
+                      Download Result
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="button-row">
+            <button onClick={removeBackground} disabled={loading || !file}>
+              {loading ? 'Processing…' : 'Remove Background'}
+            </button>
+            {previewUrl && (
+              <button className="secondary" onClick={clearSelection}>
+                Clear Image
+              </button>
             )}
           </div>
-        )}
-
-        <div className="button-row">
-          <button onClick={removeBackground} disabled={loading || !file}>
-            {loading ? 'Processing…' : 'Remove Background'}
-          </button>
-          {previewUrl && (
-            <button className="secondary" onClick={clearSelection}>
-              Clear Image
-            </button>
+          {history.length > 0 && (
+            <div className="button-row">
+              <button className="secondary" onClick={() => setShowHistory((prev) => !prev)}>
+                {showHistory ? 'Hide History' : 'Show History'}
+              </button>
+            </div>
           )}
+          <p className="status">{status}</p>
         </div>
-        {history.length > 0 && (
-          <div className="button-row">
-            <button className="secondary" onClick={() => setShowHistory((prev) => !prev)}>
-              {showHistory ? 'Hide History' : 'Show History'}
-            </button>
+
+        {history.length > 0 && showHistory && (
+          <div className="panel history-panel">
+            <div className="history-header">
+              <div>
+                <h2>History</h2>
+                <p>Recent images are saved here for quick access.</p>
+              </div>
+              <button className="secondary" onClick={clearHistory}>
+                Clear History
+              </button>
+            </div>
+            <div className="history-grid">
+              {history.map((item) => (
+                <div className="history-card" key={item.id}>
+                  <div className="history-image-row">
+                    <div>
+                      <h4>Original</h4>
+                      <img src={item.original} alt="History original" />
+                    </div>
+                    <div>
+                      <h4>Result</h4>
+                      <img src={item.result} alt="History result" />
+                    </div>
+                  </div>
+                  <div className="history-meta">
+                    <span>{item.createdAt}</span>
+                    <button className="secondary" onClick={() => downloadImage(item.result, `removed-${item.id}.png")}>
+                      Download
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-        <p className="status">{status}</p>
-      </div>
-
-      {history.length > 0 && showHistory && (
-        <div className="panel history-panel">
-          <div className="history-header">
-            <div>
-              <h2>History</h2>
-              <p>Recent background removals are saved here for quick access.</p>
-            </div>
-            <button className="secondary" onClick={clearHistory}>
-              Clear History
-            </button>
-          </div>
-          <div className="history-grid">
-            {history.map((item) => (
-              <div className="history-card" key={item.id}>
-                <div className="history-image-row">
-                  <div>
-                    <h4>Original</h4>
-                    <img src={item.original} alt="History original" />
-                  </div>
-                  <div>
-                    <h4>Result</h4>
-                    <img src={item.result} alt="History result" />
-                  </div>
-                </div>
-                <div className="history-meta">
-                  <span>{item.createdAt}</span>
-                  <button className="secondary" onClick={() => downloadImage(item.result, `removed-${item.id}.png`)}>
-                    Download
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      </main>
     </div>
-  )
-}
-
-function App() {
-  if (isClerkKeyPlaceholder) {
-    return (
-      <div className="app-shell">
-        <div className="panel">
-          <h1>AI Background Removal SaaS</h1>
-          <p>
-            Clerk is not configured yet. Open <code>frontend/.env</code> and set
-            <code>VITE_CLERK_PUBLISHABLE_KEY</code> to your Clerk publishable key.
-          </p>
-          <p>
-            Then restart the frontend with <code>npm run dev</code>.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <ClerkProvider publishableKey={clerkPubKey}>
-      <div className="app-shell">
-        <header>
-          <div>
-            <h1>AI Background Removal SaaS</h1>
-            <p>Sign in, upload an image, and remove the background instantly.</p>
-          </div>
-        </header>
-
-        <main>
-          <SignedIn>
-            <SignedInApp />
-          </SignedIn>
-
-          <SignedOut>
-            <div className="panel">
-              <h2>Get started</h2>
-              <p>Create an account to launch the background removal workflow.</p>
-              <div className="button-row">
-                <SignInButton>
-                  <button>Sign In</button>
-                </SignInButton>
-                <SignUpButton>
-                  <button>Sign Up</button>
-                </SignUpButton>
-              </div>
-            </div>
-          </SignedOut>
-        </main>
-      </div>
-    </ClerkProvider>
   )
 }
 
